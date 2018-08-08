@@ -33,7 +33,13 @@ Operation noop(Node* n) {
 }
 
 RegisterOperators reg({
-
+    Operator(
+        prim::MemoryFence,
+        [](Node* node) {
+          return [](Stack& stack) {
+            return 0;
+          };
+        }),
     Operator(
         prim::FusionGroup,
         [](Node* node) {
@@ -321,6 +327,19 @@ int64_t normalizeIndex(int64_t idx, int64_t list_size) {
   return idx;
 }
 
+template <typename TList, typename TElement>
+Operation listAppend(Node* node) {
+  return [](Stack& stack) {
+    TList a;
+    TElement el;
+    pop(stack, a, el);
+
+    a->elements().push_back(el);
+
+    return 0;
+  };
+}
+
 template <typename T>
 Operation listSelect(Node* node) {
   return [=](Stack& stack) {
@@ -454,10 +473,14 @@ Operation listSlice(Node* node) {
 }
 
 RegisterOperators reg2({
+    // Select element in the `b`th position from list `a`
+    // Equivalent to `a[b]` in Python.
     Operator("aten::select(int[] a, int b) -> int", listSelect<Shared<IntList>>),
     Operator("aten::select(float[] a, int b) -> float", listSelect<Shared<DoubleList>>),
     Operator("aten::select(Tensor[] a, int b) -> Tensor", listSelect<Shared<TensorList>>),
 
+    // Return the size of list `a`
+    // Equivalent to `len(a)` in Python.
     Operator("aten::len(int[] a) -> int", listLen<Shared<IntList>>),
     Operator("aten::len(float[] a) -> int", listLen<Shared<DoubleList>>),
     Operator("aten::len(Tensor[] a) -> int", listLen<Shared<TensorList>>),
@@ -470,6 +493,8 @@ RegisterOperators reg2({
     Operator("aten::add(float[] a, float[] b) -> float[]", listAdd<Shared<DoubleList>, double>),
     Operator("aten::add(Tensor[] a, Tensor[] b) -> Tensor[]", listAdd<Shared<TensorList>, at::Tensor>),
 
+    // Return a slice of list `l`, with a specified start, end, and step length
+    // Equivalent to `l[start:end:step]` in Python.
     Operator(
         "aten::slice(int[] l, int start, int end=9223372036854775807, int step=1) -> int[]",
         listSlice<Shared<IntList>, int64_t>),
@@ -479,6 +504,12 @@ RegisterOperators reg2({
     Operator(
         "aten::slice(Tensor[] l, int start, int end=9223372036854775807, int step=1) -> Tensor[]",
         listSlice<Shared<TensorList>, at::Tensor>),
+
+    // Append `el` to `list`
+    // Equivalent to `list.append(el)` in Python.
+    Operator("aten::append(World w, int[] list, int el) -> World", listAppend<Shared<IntList>, int64_t>),
+    Operator("aten::append(World w, float[] list, float el) -> World", listAppend<Shared<DoubleList>, double>),
+    Operator("aten::append(World w, Tensor[] list, Tensor el) -> World", listAppend<Shared<TensorList>, at::Tensor>),
 
     DEFINE_BINARY_OP(aten::add, a + b)
     DEFINE_BINARY_OP(aten::sub, a - b)
